@@ -906,3 +906,236 @@ test("bun pm cache rm does not create the directory named by a project-local .en
   expect(stderr).not.toContain("error");
   expect(exitCode).toBe(0);
 });
+
+test("bun pm ls --json outputs JSON format", async () => {
+  const urls: string[] = [];
+  setHandler(dummyRegistry(urls));
+  await writeFile(
+    join(package_dir, "package.json"),
+    JSON.stringify({
+      name: "test-ls-json",
+      version: "1.2.3",
+      dependencies: {
+        bar: "latest",
+      },
+    }),
+  );
+
+  {
+    const { stderr, exited } = spawn({
+      cmd: [bunExe(), "install"],
+      cwd: package_dir,
+      stdout: "pipe",
+      stdin: "pipe",
+      stderr: "pipe",
+      env,
+    });
+    const err = await stderr.text();
+    expect(err).not.toContain("error:");
+    expect(err).toContain("Saved lockfile");
+    expect(await exited).toBe(0);
+  }
+
+  const { stdout, stderr, exited } = spawn({
+    cmd: [bunExe(), "pm", "ls", "--json"],
+    cwd: package_dir,
+    stdout: "pipe",
+    stdin: "pipe",
+    stderr: "pipe",
+    env,
+  });
+
+  const [stderrText, stdoutText, exitCode] = await Promise.all([
+    new Response(stderr).text(),
+    new Response(stdout).text(),
+    exited,
+  ]);
+
+  expect(stderrText).toBe("");
+  const parsed = JSON.parse(stdoutText);
+  expect(parsed.name).toBe("test-ls-json");
+  expect(parsed.version).toBe("1.2.3");
+  expect(parsed.path).toBe(package_dir);
+  expect(parsed.dependencies.bar).toEqual({
+    from: "bar",
+    version: "0.0.2",
+    path: join(package_dir, "node_modules", "bar"),
+  });
+  expect(parsed.transitiveDependencies).toBeUndefined();
+  expect(exitCode).toBe(0);
+});
+
+test("bun pm ls --all --json shows transitive dependencies", async () => {
+  const urls: string[] = [];
+  setHandler(dummyRegistry(urls));
+  await writeFile(
+    join(package_dir, "package.json"),
+    JSON.stringify({
+      name: "test-ls-json-all",
+      version: "1.0.0",
+      dependencies: {
+        moo: "./moo",
+      },
+    }),
+  );
+  await mkdir(join(package_dir, "moo"));
+  await writeFile(
+    join(package_dir, "moo", "package.json"),
+    JSON.stringify({
+      name: "moo",
+      version: "0.1.0",
+      dependencies: {
+        bar: "latest",
+      },
+    }),
+  );
+
+  {
+    const { stderr, exited } = spawn({
+      cmd: [bunExe(), "install"],
+      cwd: package_dir,
+      stdout: "pipe",
+      stdin: "pipe",
+      stderr: "pipe",
+      env,
+    });
+    const err = await stderr.text();
+    expect(err).not.toContain("error:");
+    expect(err).toContain("Saved lockfile");
+    expect(await exited).toBe(0);
+  }
+
+  const { stdout, stderr, exited } = spawn({
+    cmd: [bunExe(), "pm", "ls", "--all", "--json"],
+    cwd: package_dir,
+    stdout: "pipe",
+    stdin: "pipe",
+    stderr: "pipe",
+    env,
+  });
+
+  const [stderrText, stdoutText, exitCode] = await Promise.all([
+    new Response(stderr).text(),
+    new Response(stdout).text(),
+    exited,
+  ]);
+
+  expect(stderrText).toBe("");
+  const parsed = JSON.parse(stdoutText);
+  expect(parsed.name).toBe("test-ls-json-all");
+  expect(parsed.dependencies.moo).toBeDefined();
+  expect(parsed.transitiveDependencies).toBeDefined();
+  expect(parsed.transitiveDependencies.bar).toEqual({
+    from: "bar",
+    version: "0.0.2",
+    path: join(package_dir, "node_modules", "bar"),
+  });
+  expect(exitCode).toBe(0);
+});
+
+test("bun list --json works as alias", async () => {
+  const urls: string[] = [];
+  setHandler(dummyRegistry(urls));
+  await writeFile(
+    join(package_dir, "package.json"),
+    JSON.stringify({
+      name: "test-list-json-alias",
+      version: "1.0.0",
+      dependencies: {
+        bar: "latest",
+      },
+    }),
+  );
+
+  {
+    const { stderr, exited } = spawn({
+      cmd: [bunExe(), "install"],
+      cwd: package_dir,
+      stdout: "pipe",
+      stdin: "pipe",
+      stderr: "pipe",
+      env,
+    });
+    const err = await stderr.text();
+    expect(err).not.toContain("error:");
+    expect(err).toContain("Saved lockfile");
+    expect(await exited).toBe(0);
+  }
+
+  const { stdout, stderr, exited } = spawn({
+    cmd: [bunExe(), "list", "--json"],
+    cwd: package_dir,
+    stdout: "pipe",
+    stdin: "pipe",
+    stderr: "pipe",
+    env,
+  });
+
+  const [stderrText, stdoutText, exitCode] = await Promise.all([
+    new Response(stderr).text(),
+    new Response(stdout).text(),
+    exited,
+  ]);
+
+  expect(stderrText).toBe("");
+  const parsed = JSON.parse(stdoutText);
+  expect(parsed.name).toBe("test-list-json-alias");
+  expect(parsed.dependencies.bar.version).toBe("0.0.2");
+  expect(exitCode).toBe(0);
+});
+
+test("bun pm ls --json separates dependencies and devDependencies", async () => {
+  const urls: string[] = [];
+  setHandler(dummyRegistry(urls));
+  await writeFile(
+    join(package_dir, "package.json"),
+    JSON.stringify({
+      name: "test-ls-json-dev",
+      version: "1.0.0",
+      dependencies: {
+        bar: "latest",
+      },
+      devDependencies: {
+        boba: "latest",
+      },
+    }),
+  );
+
+  {
+    const { stderr, exited } = spawn({
+      cmd: [bunExe(), "install"],
+      cwd: package_dir,
+      stdout: "pipe",
+      stdin: "pipe",
+      stderr: "pipe",
+      env,
+    });
+    const err = await stderr.text();
+    expect(err).not.toContain("error:");
+    expect(err).toContain("Saved lockfile");
+    expect(await exited).toBe(0);
+  }
+
+  const { stdout, stderr, exited } = spawn({
+    cmd: [bunExe(), "pm", "ls", "--json"],
+    cwd: package_dir,
+    stdout: "pipe",
+    stdin: "pipe",
+    stderr: "pipe",
+    env,
+  });
+
+  const [stderrText, stdoutText, exitCode] = await Promise.all([
+    new Response(stderr).text(),
+    new Response(stdout).text(),
+    exited,
+  ]);
+
+  expect(stderrText).toBe("");
+  const parsed = JSON.parse(stdoutText);
+  expect(parsed.dependencies.bar).toBeDefined();
+  expect(parsed.dependencies.boba).toBeUndefined();
+  expect(parsed.devDependencies.boba).toBeDefined();
+  expect(parsed.devDependencies.bar).toBeUndefined();
+  expect(exitCode).toBe(0);
+});
